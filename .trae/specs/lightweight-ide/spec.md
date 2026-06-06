@@ -13,7 +13,8 @@
 - **BREAKING**: 移除 Python、Kotlin 等语言插件
 - **BREAKING**: 移除不必要的ML/AI相关插件（completion-ml-ranking、search-everywhere-ml 等）
 - **BREAKING**: 移除性能测试相关插件（performanceTesting）
-- **保留**: Git 完整功能模块（git4idea、github、gitlab 保留）
+- **BREAKING**: 移除所有 Linux 平台相关代码（installers/linux/、bin/linux/、native/fsNotifier/linux/、Linux*.kt、X11*.java）
+- **保留**: Git 核心功能（git4idea，不含 GitHub/GitLab 集成）
 - **保留**: 插件扩展机制（保留完整插件体系，但不内置多余插件）
 - **保留**: 完整键盘快捷键支持
 
@@ -49,11 +50,14 @@
 
 - Affected specs: 产品规格改造，从全功能 IDE 变为轻量级 AI 编辑器
 - Affected code:
-  - `/workspace/BUILD.bazel` - 主构建文件，移除 Java 相关依赖
+  - `/workspace/BUILD.bazel` - 主构建文件，从 172 个依赖精简到 45 个（74% 缩减）
   - `/workspace/platform/` - 核心平台，添加 Light 启动模式
   - `/workspace/plugins/agent-workbench/` - AI Agent 插件，参考 Air 重构主界面
   - `/workspace/plugins/` - 移除大量内置插件
   - `/workspace/java/` - 整个 Java 模块移除
+  - `/workspace/installers/linux/` - 已删除（不兼容 Linux）
+  - `/workspace/bin/linux/` - 已删除
+  - `/workspace/native/fsNotifier/linux/` - 已删除
 
 ## ADDED Requirements
 
