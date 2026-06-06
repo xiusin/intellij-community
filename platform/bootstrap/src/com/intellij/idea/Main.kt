@@ -10,6 +10,8 @@ import com.intellij.concurrency.IdeaForkJoinWorkerThreadFactory
 import com.intellij.diagnostic.CoroutineTracerShim
 import com.intellij.diagnostic.StartUpMeasurer
 import com.intellij.ide.BootstrapBundle
+import com.intellij.ide.LightModeServiceImpl
+import com.intellij.ide.light.LightEditorFrame
 import com.intellij.ide.plugins.PluginMainDescriptor
 import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.ide.startup.StartupActionScriptManager
@@ -53,11 +55,21 @@ import java.lang.invoke.MethodType
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.function.Consumer
+import javax.swing.SwingUtilities
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.system.exitProcess
 
 fun main(rawArgs: Array<String>) {
+  if (rawArgs.any { it == "--light" }) {
+    LightModeServiceImpl.lightModeRequested = true
+    SwingUtilities.invokeLater {
+      val frame = LightEditorFrame()
+      frame.isVisible = true
+    }
+    return
+  }
+
   val startTimeNano = System.nanoTime()
   val startTimeUnixNano = System.currentTimeMillis() * 1000000
   val startupTimings = ArrayList<Any>(12)

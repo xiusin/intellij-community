@@ -1,0 +1,8 @@
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="Project" anchor="left" icon="AllIcons.Toolwindows.ToolWindowProject"/>
+        <toolWindow id="Git" anchor="left" icon="AllIcons.Toolwindows.ToolWindowChanges"/>
+        <toolWindow id="Terminal" anchor="bottom" icon="AllIcons.Toolwindows.ToolWindowTerminal"/>
+        <toolWindow id="AI Sessions" anchor="left" icon="AllIcons.Toolwindows.ToolWindowStructure"/>
+    </extensions>
+</idea-plugin>

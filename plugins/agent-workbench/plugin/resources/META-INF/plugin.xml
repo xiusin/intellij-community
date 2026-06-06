@@ -1,4 +1,4 @@
-<idea-plugin>
+<idea-plugin load="lazy">
   <id>com.intellij.agent.workbench</id>
   <name>Agent Workbench</name>
   <description><![CDATA[

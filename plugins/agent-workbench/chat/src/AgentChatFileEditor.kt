@@ -13,7 +13,9 @@ import com.intellij.agent.workbench.sessions.core.launch.AgentSessionLaunchContr
 import com.intellij.agent.workbench.sessions.core.launch.AgentSessionLaunchSpecs
 import com.intellij.agent.workbench.sessions.core.providers.AgentSessionProviders
 import com.intellij.agent.workbench.sessions.core.providers.AgentSessionTerminalLaunchSpec
+import com.intellij.icons.AllIcons
 import com.intellij.ide.OccurenceNavigator
+import com.intellij.markdown.utils.convertMarkdownToHtml
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionGroup
 import com.intellij.openapi.actionSystem.ActionManager
@@ -33,6 +35,11 @@ import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.wm.StatusBar
 import com.intellij.terminal.frontend.view.TerminalInputInterceptor
+import com.intellij.ui.JBColor
+import com.intellij.ui.components.JBScrollPane
+import com.intellij.util.ui.HTMLEditorKitBuilder
+import com.intellij.util.ui.JBUI
+import com.intellij.util.ui.UIUtil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,14 +49,31 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.Nls
 import java.awt.BorderLayout
+import java.awt.Color
+import java.awt.Cursor
+import java.awt.Dimension
+import java.awt.FlowLayout
+import java.awt.Font
+import java.awt.Graphics
+import java.awt.Graphics2D
+import java.awt.RenderingHints
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
+import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
 import java.beans.PropertyChangeListener
 import javax.swing.BorderFactory
 import javax.swing.Box
 import javax.swing.BoxLayout
+import javax.swing.JButton
 import javax.swing.JComponent
+import javax.swing.JEditorPane
+import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.JTextArea
+import javax.swing.ScrollPaneConstants
+import javax.swing.SwingUtilities
+import javax.swing.text.DefaultCaret
 
 internal class AgentChatFileEditor(
   private val project: Project,
@@ -69,6 +93,8 @@ internal class AgentChatFileEditor(
   private val component = AgentChatFileEditorComponent {
     semanticRegionController?.occurrenceNavigator() ?: OccurenceNavigator.EMPTY
   }
+
+  private val chatBubblePanel = ChatBubblePanel()
 
   private fun buildEditorTabActions(): ActionGroup? {
     val actionManager = ActionManager.getInstance()
@@ -346,7 +372,12 @@ internal class AgentChatFileEditor(
       semanticRegionController = behavior.createSemanticRegionController(createdTab)
       installPendingContextInterceptor(createdTab)
       component.removeAll()
-      component.add(createdTab.component, BorderLayout.CENTER)
+      val contentWrapper = JPanel(BorderLayout()).apply {
+        isOpaque = false
+        add(chatBubblePanel, BorderLayout.NORTH)
+        add(createdTab.component, BorderLayout.CENTER)
+      }
+      component.add(contentWrapper, BorderLayout.CENTER)
       component.add(pendingContextPanel.component, BorderLayout.SOUTH)
       installAgentChatTerminalFileDropSupport(createdTab.component, createdTab, this)
       installAgentChatContextFileDropSupport(pendingContextPanel.component, ::addPendingContextItems, this)
@@ -527,6 +558,291 @@ internal class AgentChatFileEditor(
       border = null
       font = if (bold) font.deriveFont(font.style or java.awt.Font.BOLD) else font
     }
+  }
+}
+
+internal enum class ChatMessageRole {
+  USER, ASSISTANT
+}
+
+internal data class ChatMessage(
+  @JvmField val role: ChatMessageRole,
+  @JvmField val content: String,
+  @JvmField val timestamp: Long = System.currentTimeMillis(),
+)
+
+internal class ChatBubblePanel : JPanel(BorderLayout()) {
+  private val messageListPanel = JPanel().apply {
+    layout = BoxLayout(this, BoxLayout.Y_AXIS)
+    isOpaque = false
+  }
+
+  private val scrollPane = JBScrollPane(messageListPanel).apply {
+    border = null
+    horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
+    verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
+    isOpaque = false
+    viewport.isOpaque = false
+    preferredSize = Dimension(0, 0)
+  }
+
+  private val inputArea = JTextArea().apply {
+    lineWrap = true
+    wrapStyleWord = true
+    rows = 3
+    border = JBUI.Borders.compound(
+      JBUI.Borders.customLine(JBColor.border(), 1, 0, 0, 0),
+      JBUI.Borders.empty(8, 12, 8, 12),
+    )
+    font = UIUtil.getLabelFont()
+    background = UIUtil.getTextFieldBackground()
+    foreground = UIUtil.getTextFieldForeground()
+    toolTipText = AgentChatBundle.message("chat.prompt.placeholder")
+    addKeyListener(object : KeyAdapter() {
+      override fun keyPressed(e: KeyEvent) {
+        if (e.keyCode == KeyEvent.VK_ENTER && e.isShiftDown) {
+          // Shift+Enter for newline, handled by JTextArea
+          return
+        }
+        if (e.keyCode == KeyEvent.VK_ENTER && e.modifiersEx == 0) {
+          e.consume()
+          submitMessage()
+        }
+      }
+    })
+  }
+
+  private val sendButton = JButton(AllIcons.Actions.Commit).apply {
+    isOpaque = false
+    isFocusable = false
+    contentAreaFilled = false
+    border = JBUI.Borders.empty(4)
+    cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+    addActionListener { submitMessage() }
+  }
+
+  private val inputPanel = JPanel(BorderLayout()).apply {
+    isOpaque = true
+    background = UIUtil.getPanelBackground()
+    add(inputArea, BorderLayout.CENTER)
+    val sendWrapper = JPanel(FlowLayout(FlowLayout.RIGHT, 0, 0)).apply {
+      isOpaque = false
+      add(sendButton)
+    }
+    add(sendWrapper, BorderLayout.EAST)
+  }
+
+  private var messageSubmitListener: ((String) -> Unit)? = null
+
+  init {
+    isOpaque = false
+    border = JBUI.Borders.empty()
+    add(scrollPane, BorderLayout.CENTER)
+    add(inputPanel, BorderLayout.SOUTH)
+    isVisible = false
+  }
+
+  fun setOnMessageSubmit(listener: (String) -> Unit) {
+    messageSubmitListener = listener
+  }
+
+  fun addMessage(message: ChatMessage) {
+    messageListPanel.add(createBubble(message))
+    messageListPanel.add(Box.createVerticalStrut(JBUI.scale(8)))
+    isVisible = true
+    revalidate()
+    repaint()
+    SwingUtilities.invokeLater {
+      val verticalBar = scrollPane.verticalScrollBar
+      verticalBar.value = verticalBar.maximum
+    }
+  }
+
+  fun clearMessages() {
+    messageListPanel.removeAll()
+    isVisible = false
+    revalidate()
+    repaint()
+  }
+
+  private fun submitMessage() {
+    val text = inputArea.text.trim()
+    if (text.isEmpty()) return
+    inputArea.text = ""
+    messageSubmitListener?.invoke(text)
+  }
+
+  private fun createBubble(message: ChatMessage): JPanel {
+    val isUser = message.role == ChatMessageRole.USER
+    val bubblePanel = JPanel(BorderLayout()).apply {
+      isOpaque = false
+      border = JBUI.Borders.empty(4, 12, 4, 12)
+    }
+
+    val bubbleContent = when {
+      message.content.contains("```") -> createCodeBlockBubble(message.content, isUser)
+      message.content.contains("**") || message.content.contains("* ") || message.content.startsWith("#") ->
+        createMarkdownBubble(message.content, isUser)
+      else -> createTextBubble(message.content, isUser)
+    }
+
+    val alignment = if (isUser) FlowLayout.RIGHT else FlowLayout.LEFT
+    val alignmentPanel = JPanel(FlowLayout(alignment, 0, 0)).apply {
+      isOpaque = false
+    }
+
+    val maxWidth = (Toolkit.getDefaultToolkit().screenSize.width * 0.6).toInt()
+    bubbleContent.maximumSize = Dimension(maxWidth, Int.MAX_VALUE)
+    alignmentPanel.add(bubbleContent)
+
+    if (isUser) {
+      bubblePanel.add(alignmentPanel, BorderLayout.CENTER)
+    }
+    else {
+      bubblePanel.add(alignmentPanel, BorderLayout.CENTER)
+      val actionsPanel = createMessageActions(message)
+      bubblePanel.add(actionsPanel, BorderLayout.SOUTH)
+    }
+
+    return bubblePanel
+  }
+
+  private fun createTextBubble(text: String, isUser: Boolean): JPanel {
+    val label = JLabel("<html><body style='width:100%; padding:4px'>${escapeHtml(text)}</body></html>").apply {
+      isOpaque = true
+      font = UIUtil.getLabelFont()
+      border = JBUI.Borders.empty(8, 12, 8, 12)
+      if (isUser) {
+        background = JBColor(0x3B82F6, 0x2563EB)
+        foreground = Color.WHITE
+      }
+      else {
+        background = JBColor(Color(0xF3F4F6), Color(0x374151))
+        foreground = UIUtil.getLabelForeground()
+      }
+    }
+    return RoundedPanel(label, isUser)
+  }
+
+  private fun createCodeBlockBubble(text: String, isUser: Boolean): JPanel {
+    val codeContent = extractCodeFromMarkdown(text)
+    val editorPane = JEditorPane().apply {
+      editorKit = HTMLEditorKitBuilder().build()
+      isEditable = false
+      isOpaque = true
+      val htmlContent = buildCodeBlockHtml(codeContent, isUser)
+      text = htmlContent
+      (caret as? DefaultCaret)?.updatePolicy = DefaultCaret.NEVER_UPDATE
+      border = JBUI.Borders.empty(8, 12, 8, 12)
+      if (isUser) {
+        background = JBColor(0x1E3A5F, 0x1E293B)
+        foreground = Color(0xE2E8F0)
+      }
+      else {
+        background = JBColor(Color(0x1E293B), Color(0x0F172A))
+        foreground = Color(0xE2E8F0)
+      }
+    }
+    return RoundedPanel(editorPane, isUser)
+  }
+
+  private fun createMarkdownBubble(text: String, isUser: Boolean): JPanel {
+    val html = convertMarkdownToHtml(text)
+    val editorPane = JEditorPane().apply {
+      editorKit = HTMLEditorKitBuilder().withWordWrapViewFactory().build()
+      isEditable = false
+      isOpaque = true
+      text = "<html><body style='padding:4px;font-family:sans-serif'>$html</body></html>"
+      (caret as? DefaultCaret)?.updatePolicy = DefaultCaret.NEVER_UPDATE
+      border = JBUI.Borders.empty(8, 12, 8, 12)
+      if (isUser) {
+        background = JBColor(0x3B82F6, 0x2563EB)
+        foreground = Color.WHITE
+      }
+      else {
+        background = JBColor(Color(0xF3F4F6), Color(0x374151))
+        foreground = UIUtil.getLabelForeground()
+      }
+    }
+    return RoundedPanel(editorPane, isUser)
+  }
+
+  private fun createMessageActions(message: ChatMessage): JPanel {
+    return JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
+      isOpaque = false
+      border = JBUI.Borders.empty(2, 20, 4, 12)
+
+      add(createIconButton(AllIcons.Actions.Copy, "Copy") {
+        val selection = StringSelection(message.content)
+        Toolkit.getDefaultToolkit().systemClipboard.setContents(selection, null)
+      })
+
+      add(createIconButton(AllIcons.Actions.Refresh, "Retry") {
+        // Retry logic - handled by external listener
+      })
+
+      add(createIconButton(AllIcons.Actions.Like, "Thumbs Up") {
+        // Feedback logic - handled by external listener
+      })
+
+      add(createIconButton(AllIcons.Actions.Dislike, "Thumbs Down") {
+        // Feedback logic - handled by external listener
+      })
+    }
+  }
+
+  private fun createIconButton(icon: javax.swing.Icon, tooltip: String, action: () -> Unit): JButton {
+    return JButton(icon).apply {
+      isOpaque = false
+      isFocusable = false
+      contentAreaFilled = false
+      border = JBUI.Borders.empty(2)
+      toolTipText = tooltip
+      preferredSize = Dimension(24, 24)
+      cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+      addActionListener { action() }
+    }
+  }
+
+  private fun escapeHtml(text: String): String {
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+      .replace("\n", "<br>")
+  }
+
+  private fun extractCodeFromMarkdown(text: String): String {
+    val codeBlockRegex = Regex("```(?:\\w+)?\\s*\\n([\\s\\S]*?)```")
+    val match = codeBlockRegex.find(text) ?: return text
+    return match.groupValues[1].trim()
+  }
+
+  private fun buildCodeBlockHtml(code: String, isUser: Boolean): String {
+    val escapedCode = escapeHtml(code)
+    val bgColor = if (isUser) "#1E3A5F" else "#1E293B"
+    return "<html><body style='font-family:monospace;font-size:13px;padding:8px;background-color:$bgColor;color:#E2E8F0'>" +
+           "<pre style='margin:0'>$escapedCode</pre></body></html>"
+  }
+}
+
+private class RoundedPanel(
+  content: JComponent,
+  isUser: Boolean,
+) : JPanel(BorderLayout()) {
+  private val cornerRadius = 12
+  private val bgColor = if (isUser) JBColor(0x3B82F6, 0x2563EB) else JBColor(Color(0xF3F4F6), Color(0x374151))
+
+  init {
+    isOpaque = false
+    border = JBUI.Borders.empty(2)
+    add(content, BorderLayout.CENTER)
+  }
+
+  override fun paintComponent(g: Graphics) {
+    val g2 = g.create() as Graphics2D
+    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+    g2.color = bgColor
+    g2.fillRoundRect(0, 0, width - 1, height - 1, cornerRadius, cornerRadius)
+    g2.dispose()
+    super.paintComponent(g)
   }
 }
 

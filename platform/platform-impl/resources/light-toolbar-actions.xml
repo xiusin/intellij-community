@@ -1,0 +1,17 @@
+<idea-plugin>
+    <actions>
+        <group id="LightToolBar">
+            <action id="OpenFile" class="com.intellij.ide.actions.OpenFileAction"/>
+            <action id="SaveAll" class="com.intellij.ide.actions.SaveAllAction"/>
+            <separator/>
+            <action id="Undo" class="com.intellij.ide.actions.UndoAction"/>
+            <action id="Redo" class="com.intellij.ide.actions.RedoAction"/>
+            <separator/>
+            <action id="Find" class="com.intellij.ide.actions.FindAction"/>
+            <separator/>
+            <action id="Vcs.QuickListPopupAction" class="com.intellij.openapi.vcs.actions.VcsQuickListPopupAction"/>
+            <separator/>
+            <action id="AgentWorkbench.GlobalPrompt" class="com.intellij.agent.workbench.prompt.ui.AgentPromptPaletteAction"/>
+        </group>
+    </actions>
+</idea-plugin>

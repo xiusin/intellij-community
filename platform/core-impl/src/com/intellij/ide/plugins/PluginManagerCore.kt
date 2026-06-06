@@ -377,6 +377,19 @@ object PluginManagerCore {
       .toList()
 
   @ApiStatus.Internal
+  @JvmStatic
+  fun isLazyLoaded(pluginId: PluginId): Boolean {
+    return findPlugin(pluginId)?.isLoadLazy ?: false
+  }
+
+  @ApiStatus.Internal
+  @JvmStatic
+  fun getLazyLoadedPlugins(): List<IdeaPluginDescriptorImpl> {
+    val pluginSet = pluginsState.nullablePluginSet ?: return emptyList()
+    return pluginSet.allPlugins.filter { it.isLoadLazy }
+  }
+
+  @ApiStatus.Internal
   fun getPluginNonLoadReason(pluginId: PluginId): PluginNonLoadReason? = pluginsState.getPluginNonLoadReason(pluginId)
 
   @ApiStatus.Internal

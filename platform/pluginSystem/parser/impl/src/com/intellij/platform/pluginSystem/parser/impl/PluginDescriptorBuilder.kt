@@ -41,6 +41,7 @@ interface PluginDescriptorBuilder {
   var isRestartRequired: Boolean
   var isLicenseOptional: Boolean
   var isIndependentFromCoreClassLoader: Boolean
+  var isLoadLazy: Boolean
 
   var productCode: String?
   var releaseDate: LocalDate?

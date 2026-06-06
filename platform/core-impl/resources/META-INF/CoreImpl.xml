@@ -38,5 +38,7 @@
                     serviceImplementation="com.intellij.psi.impl.PsiCachedValuesFactory"/>
     <applicationService serviceInterface="com.intellij.psi.stubs.StubElementRegistryService"
                         serviceImplementation="com.intellij.psi.stubs.StubElementRegistryServiceImpl"/>
+    <applicationService serviceInterface="com.intellij.openapi.application.LightModeService"
+                        serviceImplementation="com.intellij.ide.LightModeServiceImpl"/>
   </extensions>
 </idea-plugin>

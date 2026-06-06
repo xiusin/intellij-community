@@ -12,6 +12,8 @@ object PluginXmlConst {
   const val PLUGIN_DEPENDENT_ON_CORE_ATTR: String = "dependent-on-core"
   const val PLUGIN_IS_SEPARATE_JAR_ATTR: String = "separate-jar"
   const val PLUGIN_VERSION_ATTR: String = "version"
+  const val PLUGIN_LOAD_ATTR: String = "load"
+  const val PLUGIN_LOAD_LAZY_VALUE: String = "lazy"
   const val CONTENT_MODULE_VISIBILITY_ATTR: String = "visibility"
   const val CONTENT_MODULE_VISIBILITY_PRIVATE_VALUE: String = "private"
   const val CONTENT_MODULE_VISIBILITY_INTERNAL_VALUE: String = "internal"

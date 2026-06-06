@@ -21,6 +21,7 @@ import com.intellij.openapi.util.text.HtmlChunk
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.ui.EditorTextField
+import com.intellij.ui.JBColor
 import com.intellij.ui.WindowMoveListener
 import com.intellij.ui.components.ActionLink
 import com.intellij.ui.components.JBLabel
@@ -43,11 +44,16 @@ import org.jetbrains.annotations.NonNls
 import org.jetbrains.annotations.Nls
 import java.awt.BorderLayout
 import java.awt.CardLayout
+import java.awt.Color
 import java.awt.Cursor
 import java.awt.Dimension
-import java.awt.Color
+import java.awt.Graphics
+import java.awt.Graphics2D
+import java.awt.RenderingHints
 import java.awt.event.ContainerAdapter
 import java.awt.event.ContainerEvent
+import java.awt.event.KeyAdapter
+import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.DefaultListModel
@@ -464,20 +470,86 @@ internal fun createAgentPromptPaletteView(
     layoutParent = promptPanel,
   )
 
-  val rootPanel = BorderLayoutPanel().apply {
-    background = JBUI.CurrentTheme.Popup.BACKGROUND
-    preferredSize = AGENT_PROMPT_PALETTE_PREFERRED_SIZE
-    minimumSize = AGENT_PROMPT_PALETTE_MINIMUM_SIZE
-    addToTop(headerPanel)
-    addToCenter(promptPanel)
-    addToBottom(bottomPanel)
+  val rootPanel = object : BorderLayoutPanel() {
+    private val cornerRadius = 16
+
+    init {
+      background = JBUI.CurrentTheme.Popup.BACKGROUND
+      preferredSize = AGENT_PROMPT_PALETTE_PREFERRED_SIZE
+      minimumSize = AGENT_PROMPT_PALETTE_MINIMUM_SIZE
+      addToTop(headerPanel)
+      addToCenter(promptPanel)
+      addToBottom(bottomPanel)
+      border = JBUI.Borders.empty()
+      isOpaque = true
+    }
+
+    override fun paintComponent(g: Graphics) {
+      val g2 = g.create() as Graphics2D
+      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+      g2.color = background
+      g2.fillRoundRect(0, 0, width, height, cornerRadius, cornerRadius)
+      g2.dispose()
+      super.paintComponent(g)
+    }
   }
+
+  val rootPanelWithShadow = object : JPanel(BorderLayout()) {
+    private val cornerRadius = 16
+    private val shadowColor = JBColor(Color(0, 0, 0, 40), Color(0, 0, 0, 60))
+
+    init {
+      isOpaque = false
+      border = JBUI.Borders.empty(12)
+      add(rootPanel, BorderLayout.CENTER)
+    }
+
+    override fun paintComponent(g: Graphics) {
+      val g2 = g.create() as Graphics2D
+      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+      val shadowOffset = 2
+      // Draw shadow
+      g2.color = shadowColor
+      g2.fillRoundRect(shadowOffset, shadowOffset, width - shadowOffset - 1, height - shadowOffset - 1, cornerRadius, cornerRadius)
+      g2.dispose()
+      super.paintComponent(g)
+    }
+  }
+
+  val backdropPanel = object : JPanel(BorderLayout()) {
+    init {
+      isOpaque = true
+      background = JBColor(Color(0, 0, 0, 80), Color(0, 0, 0, 120))
+      add(rootPanelWithShadow, BorderLayout.CENTER)
+    }
+
+    override fun paintComponent(g: Graphics) {
+      val g2 = g.create() as Graphics2D
+      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+      g2.color = background
+      g2.fillRect(0, 0, width, height)
+      g2.dispose()
+      super.paintComponent(g)
+    }
+  }
+
+  // Add Ctrl+Enter shortcut to the prompt area
+  promptArea.addKeyboardListener(object : KeyAdapter() {
+    override fun keyPressed(e: KeyEvent) {
+      if (e.keyCode == KeyEvent.VK_ENTER && e.isControlDown && !e.isShiftDown) {
+        e.consume()
+        // The Ctrl+Enter event will be handled by the popup's ok action
+        val okAction = promptArea.getClientProperty("OK_ACTION") as? (() -> Unit)
+        okAction?.invoke()
+      }
+    }
+  })
   headerToolbar.targetComponent = rootPanel
 
   WindowMoveListener(rootPanel).installTo(headerPanel)
 
   return AgentPromptPaletteView(
-    rootPanel = rootPanel,
+    rootPanel = backdropPanel,
     promptPanel = promptPanel,
     suggestionsPanel = suggestionsPanel,
     composerContextPanel = composerContextPanel,

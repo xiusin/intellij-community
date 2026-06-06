@@ -3,6 +3,8 @@ package com.intellij.util.indexing;
 
 import com.google.common.collect.Iterators;
 import com.intellij.ide.AppLifecycleListener;
+import com.intellij.ide.LightModeConfig;
+import com.intellij.ide.LightModeServiceImpl;
 import com.intellij.ide.startup.ServiceNotReadyException;
 import com.intellij.openapi.actionSystem.ex.ActionUtil;
 import com.intellij.openapi.application.Application;
@@ -474,6 +476,10 @@ public final class FileBasedIndexImpl extends FileBasedIndexEx {
 
   @Override
   public synchronized void loadIndexes() {
+    if (LightModeServiceImpl.lightModeRequested && LightModeConfig.getInstance().disableIndexing) {
+      LOG.info("Indexing disabled in light mode");
+      return;
+    }
     if (myRegisteredIndexes == null) {
       LOG.info("Loading indexes");
 

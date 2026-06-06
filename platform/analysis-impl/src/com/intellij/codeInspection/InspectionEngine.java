@@ -20,6 +20,8 @@ import com.intellij.codeInspection.reference.RefVisitor;
 import com.intellij.concurrency.ConcurrentCollectionFactory;
 import com.intellij.concurrency.JobLauncher;
 import com.intellij.diagnostic.PluginException;
+import com.intellij.ide.LightModeConfig;
+import com.intellij.ide.LightModeServiceImpl;
 import com.intellij.lang.Language;
 import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.lang.injection.InjectedLanguageManager;
@@ -135,6 +137,9 @@ public final class InspectionEngine {
                                                                                    @Nullable UserDataHolderBase userData,
                                                                                    // when returned true -> add to the holder, false -> do not add to the holder
                                                                                    @NotNull PairProcessor<? super LocalInspectionToolWrapper, ? super ProblemDescriptor> foundDescriptorCallback) {
+    if (LightModeServiceImpl.lightModeRequested && LightModeConfig.getInstance().disableInspections) {
+      return Collections.emptyMap();
+    }
     if (toolWrappers.isEmpty()) return Collections.emptyMap();
 
     List<Divider.DividedElements> allDivided = new ArrayList<>();

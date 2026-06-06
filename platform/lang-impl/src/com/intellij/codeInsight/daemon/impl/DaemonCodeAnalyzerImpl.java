@@ -24,6 +24,8 @@ import com.intellij.codeWithMe.ClientId;
 import com.intellij.concurrency.JobLauncher;
 import com.intellij.concurrency.ThreadContext;
 import com.intellij.ide.PowerSaveMode;
+import com.intellij.ide.LightModeConfig;
+import com.intellij.ide.LightModeServiceImpl;
 import com.intellij.ide.impl.ProjectUtil;
 import com.intellij.lang.annotation.HighlightSeverity;
 import com.intellij.notebook.editor.BackedVirtualFile;
@@ -639,12 +641,18 @@ public final class DaemonCodeAnalyzerImpl extends DaemonCodeAnalyzerEx
 
   @Override
   public void restart(@NotNull Object reason) {
+    if (LightModeServiceImpl.lightModeRequested && LightModeConfig.getInstance().disableCodeAnalysis) {
+      return;
+    }
     myFileStatusMap.markAllFilesDirty(reason);
     stopProcess(true, reason.toString());
   }
 
   @Override
   public void restart(@NotNull PsiFile psiFile, @NotNull Object reason) {
+    if (LightModeServiceImpl.lightModeRequested && LightModeConfig.getInstance().disableCodeAnalysis) {
+      return;
+    }
     assertFileFromMyProject(psiFile.getProject(), psiFile);
     Document document = psiFile.getViewProvider().getDocument();
     if (document != null) {

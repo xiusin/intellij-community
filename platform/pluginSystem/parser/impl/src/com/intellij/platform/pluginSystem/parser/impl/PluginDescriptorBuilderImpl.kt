@@ -42,6 +42,7 @@ internal class PluginDescriptorBuilderImpl : PluginDescriptorBuilder {
   override var isRestartRequired: Boolean = false
   override var isLicenseOptional: Boolean = false
   override var isIndependentFromCoreClassLoader: Boolean = false
+  override var isLoadLazy: Boolean = false
 
   override var productCode: String? = null
   override var releaseDate: LocalDate? = null
@@ -146,6 +147,7 @@ internal class PluginDescriptorBuilderImpl : PluginDescriptorBuilder {
     isRestartRequired = isRestartRequired,
     isLicenseOptional = isLicenseOptional,
     isIndependentFromCoreClassLoader = isIndependentFromCoreClassLoader,
+    isLoadLazy = isLoadLazy,
     productCode = productCode,
     releaseDate = releaseDate,
     releaseVersion = releaseVersion,

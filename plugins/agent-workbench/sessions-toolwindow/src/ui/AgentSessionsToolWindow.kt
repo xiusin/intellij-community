@@ -15,15 +15,20 @@ import com.intellij.agent.workbench.sessions.jbcentral.JbCentralQuotaCliSupport
 import com.intellij.agent.workbench.sessions.jbcentral.JbCentralQuotaHintBanner
 import com.intellij.agent.workbench.sessions.jbcentral.JbCentralQuotaHintStateService
 import com.intellij.agent.workbench.sessions.core.providers.AgentSessionProviders
+import com.intellij.agent.workbench.sessions.core.SessionActionTarget
 import com.intellij.agent.workbench.sessions.core.statistics.AgentWorkbenchEntryPoint
 import com.intellij.agent.workbench.sessions.model.AgentSessionThreadViewMode
+import com.intellij.agent.workbench.sessions.model.ArchiveThreadTarget
 import com.intellij.agent.workbench.sessions.service.AgentArchivedSessionsService
+import com.intellij.agent.workbench.sessions.service.AgentSessionArchiveService
 import com.intellij.agent.workbench.sessions.service.AgentSessionLaunchService
 import com.intellij.agent.workbench.sessions.service.AgentSessionProviderAvailabilityListener
 import com.intellij.agent.workbench.sessions.service.AgentSessionProviderAvailabilityService
 import com.intellij.agent.workbench.sessions.service.AgentSessionReadService
 import com.intellij.agent.workbench.sessions.service.AgentSessionRefreshService
+import com.intellij.agent.workbench.sessions.service.AgentSessionRenameService
 import com.intellij.agent.workbench.sessions.service.AgentSessionsToolWindowVisibilityService
+import com.intellij.agent.workbench.sessions.service.showRenameThreadDialog
 import com.intellij.agent.workbench.sessions.settings.AgentSessionProviderSettingsListener
 import com.intellij.agent.workbench.sessions.settings.AgentSessionProviderSettingsService
 import com.intellij.agent.workbench.sessions.state.AgentSessionThreadViewStateService
@@ -33,6 +38,7 @@ import com.intellij.agent.workbench.sessions.toolwindow.tree.SessionTreeId
 import com.intellij.agent.workbench.sessions.toolwindow.tree.SessionTreeModel
 import com.intellij.agent.workbench.sessions.toolwindow.tree.SessionTreeModelDiff
 import com.intellij.agent.workbench.sessions.toolwindow.tree.SessionTreeNode
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.DataSink
 import com.intellij.openapi.actionSystem.UiDataProvider
@@ -42,21 +48,31 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.openapi.wm.ex.ToolWindowManagerListener
+import com.intellij.ui.JBColor
 import com.intellij.ui.ScrollPaneFactory
+import com.intellij.ui.SearchTextField
 import com.intellij.ui.TreeUIHelper
 import com.intellij.ui.tree.AsyncTreeModel
 import com.intellij.ui.tree.StructureTreeModel
 import com.intellij.ui.treeStructure.Tree
 import com.intellij.util.ui.EdtInvocationManager
+import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.tree.TreeUtil
 import java.awt.BorderLayout
 import java.awt.Graphics
+import java.awt.event.KeyAdapter
+import java.awt.event.KeyEvent
+import java.awt.event.MouseAdapter
+import java.awt.event.MouseEvent
 import java.util.Collections
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicInteger
 import javax.swing.BoxLayout
+import javax.swing.JButton
 import javax.swing.JComponent
+import javax.swing.JMenuItem
 import javax.swing.JPanel
+import javax.swing.JPopupMenu
 import javax.swing.ToolTipManager
 import javax.swing.tree.TreePath
 
@@ -111,6 +127,41 @@ internal class AgentSessionsToolWindowPanel(
 
   private val treeStructure = AgentSessionsTreeStructure { sessionTreeModel }
   private val structureTreeModel = StructureTreeModel(treeStructure, this)
+
+  private val searchTextField = SearchTextField().apply {
+    addDocumentListener(object : javax.swing.event.DocumentListener {
+      override fun insertUpdate(e: javax.swing.event.DocumentEvent?) = applySearchFilter()
+      override fun removeUpdate(e: javax.swing.event.DocumentEvent?) = applySearchFilter()
+      override fun changedUpdate(e: javax.swing.event.DocumentEvent?) = applySearchFilter()
+    })
+    addKeyboardListener(object : KeyAdapter() {
+      override fun keyPressed(e: KeyEvent) {
+        if (e.keyCode == KeyEvent.VK_ESCAPE) {
+          text = ""
+          tree.requestFocusInWindow()
+        }
+      }
+    })
+  }
+
+  private val newSessionButton = JButton(AllIcons.General.Add).apply {
+    toolTipText = AgentSessionsBundle.message("toolwindow.action.new.session")
+    isOpaque = false
+    isFocusable = false
+    border = JBUI.Borders.empty(4)
+    contentAreaFilled = false
+    addActionListener {
+      val provider = lastUsedProvider ?: AgentSessionProviders.allProviders().firstOrNull() ?: return@addActionListener
+      val mode = service<AgentSessionUiPreferencesStateService>().getLastUsedLaunchMode()
+      service<AgentSessionLaunchService>().createNewSession(
+        path = project.basePath ?: "",
+        provider = provider,
+        mode = mode,
+        entryPoint = AgentWorkbenchEntryPoint.TREE_ROW_OVERLAY,
+        currentProject = project,
+      )
+    }
+  }
 
   @Suppress("UNNECESSARY_LATEINIT")
   private lateinit var rowActionsOverlay: AgentSessionsTreeRowActionsOverlay
@@ -272,7 +323,9 @@ internal class AgentSessionsToolWindowPanel(
     installProviderAvailabilityRefresh()
     configureTree()
     add(northPanel, BorderLayout.NORTH)
+    add(buildToolbarPanel(), BorderLayout.NORTH)
     add(ScrollPaneFactory.createScrollPane(tree, true), BorderLayout.CENTER)
+    installContextMenu()
 
     interactionController.install()
     installToolWindowVisibilityTracker()
@@ -363,6 +416,97 @@ internal class AgentSessionsToolWindowPanel(
       isOpaque = false
       contributions.forEach(::add)
     }
+  }
+
+  private fun buildToolbarPanel(): JPanel {
+    return JPanel(BorderLayout()).apply {
+      isOpaque = false
+      border = JBUI.Borders.compound(
+        JBUI.Borders.customLine(JBColor.border(), 0, 0, 1, 0),
+        JBUI.Borders.empty(4, 8, 4, 4),
+      )
+      add(searchTextField, BorderLayout.CENTER)
+      add(newSessionButton, BorderLayout.EAST)
+    }
+  }
+
+  private fun applySearchFilter() {
+    val query = searchTextField.text.trim()
+    if (query.isEmpty()) {
+      return
+    }
+    // Use the existing tree speed search for filtering
+    tree.requestFocusInWindow()
+    val speedSearch = com.intellij.ui.SpeedSearchBase.getSpeedSearch(tree)
+    if (speedSearch != null) {
+      speedSearch.searchPopup.text = query
+      speedSearch.refreshSelection()
+    }
+  }
+
+  private fun installContextMenu() {
+    tree.addMouseListener(object : MouseAdapter() {
+      override fun mousePressed(e: MouseEvent) {
+        if (e.isPopupTrigger) {
+          showContextMenu(e)
+        }
+      }
+
+      override fun mouseReleased(e: MouseEvent) {
+        if (e.isPopupTrigger) {
+          showContextMenu(e)
+        }
+      }
+
+      private fun showContextMenu(e: MouseEvent) {
+        val path = tree.getPathForLocation(e.x, e.y) ?: return
+        val id = idFromPath(path) ?: return
+        val treeNode = sessionTreeNode(id) ?: return
+        if (treeNode !is SessionTreeNode.Thread) return
+
+        val thread = treeNode.thread
+        val popupMenu = JPopupMenu()
+
+        val renameService = service<AgentSessionRenameService>()
+        val renameTarget = SessionActionTarget.Thread(
+          path = treeNode.project.path,
+          provider = thread.provider,
+          threadId = thread.id,
+          title = thread.title,
+          thread = thread,
+        )
+        if (renameService.canRenameThreadInTree(renameTarget)) {
+          popupMenu.add(JMenuItem(AgentSessionsBundle.message("toolwindow.rename.dialog.title")).apply {
+            addActionListener {
+              val requestedName = showRenameThreadDialog(project, thread.title)
+              if (requestedName != null) {
+                renameService.renameThreadFromTree(project, renameTarget, requestedName)
+              }
+            }
+          })
+        }
+
+        val archiveService = service<AgentSessionArchiveService>()
+        if (archiveService.canArchiveProvider(thread.provider)) {
+          popupMenu.add(JMenuItem(AgentSessionsBundle.message("toolwindow.action.archive")).apply {
+            addActionListener {
+              archiveService.archiveThreads(
+                targets = listOf(
+                  ArchiveThreadTarget.Thread(
+                    path = treeNode.project.path,
+                    provider = thread.provider,
+                    threadId = thread.id,
+                  )
+                ),
+                entryPoint = AgentWorkbenchEntryPoint.TREE_POPUP,
+              )
+            }
+          })
+        }
+
+        popupMenu.show(tree, e.x, e.y)
+      }
+    })
   }
 
   private fun configureTree() {

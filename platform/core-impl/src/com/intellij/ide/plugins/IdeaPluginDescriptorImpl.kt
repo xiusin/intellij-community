@@ -33,6 +33,7 @@ sealed class IdeaPluginDescriptorImpl(
     .let(::convertDepends)
   val incompatiblePlugins: List<PluginId> = raw.incompatibleWith.map(PluginId::getId)
   open val pluginAliases: List<PluginId> = raw.pluginAliases.map(PluginId::getId)
+  val isLoadLazy: Boolean = raw.isLoadLazy
 
   abstract val moduleDependencies: ModuleDependencies
 

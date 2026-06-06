@@ -45,6 +45,7 @@ class RawPluginDescriptor(
   val isLicenseOptional: Boolean,
   // makes sense only for product modules for now
   val isIndependentFromCoreClassLoader: Boolean,
+  val isLoadLazy: Boolean,
 
   val productCode: String?,
   val releaseDate: LocalDate?,

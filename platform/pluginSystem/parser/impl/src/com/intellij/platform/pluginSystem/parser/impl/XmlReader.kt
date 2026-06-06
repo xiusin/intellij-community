@@ -119,6 +119,11 @@ private fun readRootAttributes(reader: XMLStreamReader2, builder: PluginDescript
       PluginXmlConst.PLUGIN_DEPENDENT_ON_CORE_ATTR -> builder.isIndependentFromCoreClassLoader = !reader.getAttributeAsBoolean(i)
       PluginXmlConst.PLUGIN_IS_SEPARATE_JAR_ATTR -> builder.isSeparateJar = reader.getAttributeAsBoolean(i)
       PluginXmlConst.CONTENT_MODULE_VISIBILITY_ATTR -> builder.visibility = readModuleVisibility(reader.getAttributeValue(i), reader)
+      PluginXmlConst.PLUGIN_LOAD_ATTR -> {
+        when (reader.getAttributeValue(i)) {
+          PluginXmlConst.PLUGIN_LOAD_LAZY_VALUE -> builder.isLoadLazy = true
+        }
+      }
       PluginXmlConst.PLUGIN_VERSION_ATTR -> {
         // internalVersionString - why it is not used but just checked?
         getNullifiedAttributeValue(reader, i)?.let {
