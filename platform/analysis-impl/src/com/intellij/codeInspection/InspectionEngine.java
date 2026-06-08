@@ -137,7 +137,7 @@ public final class InspectionEngine {
                                                                                    @Nullable UserDataHolderBase userData,
                                                                                    // when returned true -> add to the holder, false -> do not add to the holder
                                                                                    @NotNull PairProcessor<? super LocalInspectionToolWrapper, ? super ProblemDescriptor> foundDescriptorCallback) {
-    if (LightModeServiceImpl.lightModeRequested && LightModeConfig.getInstance().disableInspections) {
+    if (LightModeServiceImpl.lightModeRequested && LightModeConfig.getInstance().getDisableInspections()) {
       return Collections.emptyMap();
     }
     if (toolWrappers.isEmpty()) return Collections.emptyMap();

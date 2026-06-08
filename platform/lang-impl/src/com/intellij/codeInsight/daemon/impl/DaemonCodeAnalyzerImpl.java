@@ -641,7 +641,7 @@ public final class DaemonCodeAnalyzerImpl extends DaemonCodeAnalyzerEx
 
   @Override
   public void restart(@NotNull Object reason) {
-    if (LightModeServiceImpl.lightModeRequested && LightModeConfig.getInstance().disableCodeAnalysis) {
+    if (LightModeServiceImpl.lightModeRequested && LightModeConfig.getInstance().getDisableCodeAnalysis()) {
       return;
     }
     myFileStatusMap.markAllFilesDirty(reason);
@@ -650,7 +650,7 @@ public final class DaemonCodeAnalyzerImpl extends DaemonCodeAnalyzerEx
 
   @Override
   public void restart(@NotNull PsiFile psiFile, @NotNull Object reason) {
-    if (LightModeServiceImpl.lightModeRequested && LightModeConfig.getInstance().disableCodeAnalysis) {
+    if (LightModeServiceImpl.lightModeRequested && LightModeConfig.getInstance().getDisableCodeAnalysis()) {
       return;
     }
     assertFileFromMyProject(psiFile.getProject(), psiFile);

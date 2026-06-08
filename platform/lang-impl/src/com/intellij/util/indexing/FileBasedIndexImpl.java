@@ -476,7 +476,7 @@ public final class FileBasedIndexImpl extends FileBasedIndexEx {
 
   @Override
   public synchronized void loadIndexes() {
-    if (LightModeServiceImpl.lightModeRequested && LightModeConfig.getInstance().disableIndexing) {
+    if (LightModeServiceImpl.lightModeRequested && LightModeConfig.getInstance().getDisableIndexing()) {
       LOG.info("Indexing disabled in light mode");
       return;
     }
