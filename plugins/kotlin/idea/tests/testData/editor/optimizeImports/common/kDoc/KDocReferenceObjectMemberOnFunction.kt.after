@@ -1,9 +1,0 @@
-// IGNORE_K1
-package pack
-
-object MyObject {
-    /**
-     * [objectFunction]
-     */
-    fun objectFunction() {}
-}

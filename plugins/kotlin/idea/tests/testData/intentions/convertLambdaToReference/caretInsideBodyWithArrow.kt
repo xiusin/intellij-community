@@ -1,6 +1,0 @@
-// IS_APPLICABLE: true
-
-fun foo(strings: List<String>) =
-    strings.map { it -> it.hashCode(<caret>) }
-
-// IGNORE_K1
