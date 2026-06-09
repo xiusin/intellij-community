@@ -59,8 +59,6 @@ jvm_library(
         "//platform/testFramework:testFramework_test_lib",
         "//java/testFramework",
         "//java/testFramework:testFramework_test_lib",
-        "//plugins/testng",
-        "//plugins/testng:testng_test_lib",
         "//java/execution/impl",
         "//java/execution/impl:impl_test_lib",
         "//platform/lang-core",
